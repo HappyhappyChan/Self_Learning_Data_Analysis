@@ -2488,7 +2488,117 @@ GROUP BY job
 ORDER BY job
 ```
 
+法1：当某一数的正序和逆序累计均大于整个序列的数字个数的一半即为中位数
 
+```
+比如:
+A A B B C C D D 
+1 2 3  4  5 6  7 8
+8 7 6  5  4  3 2 1
+那么上面的4，5以及5，4就是中位数，如果是奇数的话，就只有1个
+再比如
+A2个，B3个，C5个，D2个，
+正序2，5，10，12
+倒序12，10，7，2
+正序和12，大于等于6的，为C,D，
+逆序和为12，大于等于6的为ABC，所以最后中位数为C
+```
+
+```mysql
+select grade from (select grade,(select sum(number) from class_grade) as total,
+        sum(number) over(order by grade) a,
+        sum(number) over(order by grade desc) b
+        from class_grade) t1
+where a >= total/2 and b >=total/2
+order by grade;
+```
+
+法2：1. 求出每个等级的开始名次和结束名次
+
+```mysql
+select grade
+      ,number
+      ,sum(number) over(order by grade)-number+1 as left_order
+      ,sum(number) over(order by grade)          as right_order
+  from class_grade
+ order by grade
+```
+
+2. 求出中位数所在的名次
+
+   ```mysql
+   select floor((sum(number)+1)/2) as mid
+     from class_grade
+   union 
+   select ceil((sum(number)+1)/2) as mid
+     from class_grade
+   ```
+
+3. 找到中位数对应的等级
+
+   直接用`mid between`介于开始名次`left_order`和结束名词`right_order`之间就能找到对应的等级。
+   注意中位数可能有两个，恰好在同一个等级里面，所以这里要加上`distinct`关键词去重。
+
+   ```mysql
+   -- 第1张表
+   with t1 as 
+   (
+   select grade
+         ,number
+         ,sum(number) over(order by grade)-number+1 as left_order
+         ,sum(number) over(order by grade)          as right_order
+     from class_grade
+    order by grade
+   )
+   -- 第2张表
+   , t2 as 
+   (
+   select floor((sum(number)+1)/2) as mid
+     from class_grade
+   union 
+   select ceil((sum(number)+1)/2) as mid
+     from class_grade
+   )
+   -- 3. 找到中位数对应的等级
+   select distinct grade
+     from t1,t2
+    where t2.mid between left_order and right_order
+   ```
+
+   我自己改的
+
+   ```mysql
+   with t1 as (select grade
+         ,number
+         ,sum(number) over(order by grade)-number+1 as left_order
+         ,sum(number) over(order by grade)          as right_order
+     from class_grade
+    order by grade),
+   
+   t2 as (select 
+    floor(( sum(number) + 1 )/ 2 ) AS "n1", 
+   floor(( sum(number) + 2 )/ 2 ) AS 'n2' 
+   from class_grade)
+   
+   select distinct grade
+   from t1, t2
+   where n1 between left_order and right_order or n2 between left_order and right_order
+   ```
+
+   
+
+#### 同月不同年
+
+```mysql
+-- 因date日期类型经过 DATE_FORMAT()后变成 字符串，所以使用right()函数取后两位即为月数
+ON h1.job=h2.job AND  right(first_year_mon,2)=right(second_year_mon,2)
+```
+
+#### 写代码当天
+
+```mysql
+where create_time = current_date
+```
 
 ## 综合处理
 
